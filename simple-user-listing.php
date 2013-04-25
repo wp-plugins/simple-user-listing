@@ -4,7 +4,7 @@ Plugin Name: Simple User Listing
 Plugin URI: http://wordpress.org/extend/plugins/simple-user-listing/
 Description: Create a simple shortcode to list our WordPress users.
 Author: Kathy Darling
-Version: 1.1.1
+Version: 1.2
 Author URI: http://kathyisawesome.com
 License: GPL2
 
@@ -90,6 +90,8 @@ if ( ! class_exists( 'Simple_User_Listing' ) ) {
 			extract(shortcode_atts(array(
 				"role" => '',
 				"number" => get_option( 'posts_per_page', 10 ),
+				"orderby" => 'login',
+				"order" => 'ASC'
 			), $atts));
 
 			$role = sanitize_text_field($role);
@@ -114,7 +116,10 @@ if ( ! class_exists( 'Simple_User_Listing' ) ) {
 				// Generate the query based on search field
 				$args2 =
 					array(
-						'search' => '*' . $search . '*'
+						'search' => '*' . $search . '*',
+						'number' => $number,
+						'orderby' => $orderby,
+						'order' => $order
 					);
 			} else {
 				// Generate the query
@@ -123,6 +128,8 @@ if ( ! class_exists( 'Simple_User_Listing' ) ) {
 						'role' => $role,
 						'offset' => $offset,
 						'number' => $number,
+						'orderby' => $orderby,
+						'order' => $order
 					);
 			}
 
