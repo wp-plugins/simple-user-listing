@@ -4,7 +4,7 @@ Plugin Name: Simple User Listing
 Plugin URI: http://wordpress.org/extend/plugins/simple-user-listing/
 Description: Create a simple shortcode to list our WordPress users.
 Author: Kathy Darling
-Version: 1.2.2
+Version: 1.3
 Author URI: http://kathyisawesome.com
 License: GPL2
 
@@ -37,27 +37,24 @@ if ( ! class_exists( 'Simple_User_Listing' ) ) {
 
 	class Simple_User_Listing {
 
-		/**
-		 * @var string
-		 */
-		var $template_url;
+		/* variables */
+		public $plugin_path;
+		public $template_url;
+		public $allowed_search_vars;
 
-	    public function __construct() {
-
-	    	// Variables
-			$this->template_url			= trailingslashit( apply_filters( 'sul_template_url', 'simple-user-listing' ) );
+	   public function __construct() {
 
 			add_action('plugins_loaded', array( $this, 'load_text_domain' ) );
-
 		   add_shortcode( 'userlist', array( $this, 'shortcode_callback' ) );
 		   add_action( 'simple_user_listing_before_loop', array( $this, 'add_search' ) );
 		   add_action( 'simple_user_listing_after_loop', array( $this, 'add_nav' ) );
 		   add_filter( 'body_class', array( $this, 'body_class' ) );
+		   add_filter( 'query_vars', array( $this, 'user_query_vars' ) );
 
-	    }
+	   }
 
 		/**
-		 * Get the plugin path.
+		 * Ready for translations
 		 *
 		 * @access public
 		 * @return none
@@ -65,6 +62,7 @@ if ( ! class_exists( 'Simple_User_Listing' ) ) {
 		function load_text_domain() {
 		 load_plugin_textdomain( 'simple-user-listing', false, dirname( plugin_basename( __FILE__ ) ) . '/languages/' );
 		}
+
 		/**
 		 * Get the plugin path.
 		 *
@@ -77,6 +75,29 @@ if ( ! class_exists( 'Simple_User_Listing' ) ) {
 			return $this->plugin_path = untrailingslashit( plugin_dir_path( __FILE__ ) );
 		}
 
+		/**
+		 * Get the template url
+		 * @since 1.3
+		 * @access public
+		 * @return string
+		 */
+		function template_url() {
+			if ( $this->template_url ) return $this->template_url;
+
+			return $this->template_url = trailingslashit( apply_filters( 'sul_template_url', 'simple-user-listing' ) );
+		}
+
+		/**
+		 * Get Allowed Search Args
+		 * @since 1.3
+		 * @access public
+		 * @return array
+		 */
+		function allowed_search_vars() {
+			if ( $this->allowed_search_vars ) return $this->allowed_search_vars;
+
+			return $this->allowed_search_vars = apply_filters( 'sul_user_allowed_search_vars', array( 'as' ) );
+		}
 
 		/**
 		 * Callback for the shortcode
@@ -88,6 +109,7 @@ if ( ! class_exists( 'Simple_User_Listing' ) ) {
 			global $post, $sul_users, $user;
 
 			extract(shortcode_atts(array(
+				"list_id" => '',
 				"role" => '',
 				"number" => get_option( 'posts_per_page', 10 ),
 				"orderby" => 'login',
@@ -105,42 +127,35 @@ if ( ! class_exists( 'Simple_User_Listing' ) ) {
 			$search = ( isset($_GET["as"]) ) ? sanitize_text_field($_GET["as"]) : false ;
 
 			// Get Query Var for pagination. This already exists in WordPress
-			$page = (get_query_var('paged')) ? get_query_var('paged') : 1;
+			$page = ( get_query_var( 'paged' ) ) ? get_query_var( 'paged' )  : 1;
 
 			// Calculate the offset (i.e. how many users we should skip)
-			$offset = ($page - 1) * $number;
+			$offset = ( $page - 1 ) * $number;
 
-			$args1 = array( 'query_id' => 'simple_user_listing' );
+			$args = array(
+				'query_id' => 'simple_user_listing',
+				'offset' => $offset,
+				'number' => $number,
+				'orderby' => $orderby,
+				'order' => $order
+			);
 
-			if ($search){
+			if ( $search ){
 				// Generate the query based on search field
-				$args2 =
-					array(
-						'search' => '*' . $search . '*',
-						'number' => $number,
-						'orderby' => $orderby,
-						'order' => $order
-					);
+				$args['search'] = '*' . $search . '*';
 			} else {
-				// Generate the query
-				$args2 =
-					array(
-						'role' => $role,
-						'offset' => $offset,
-						'number' => $number,
-						'orderby' => $orderby,
-						'order' => $order
-					);
+				// Generate the search based on role
+				$args['role'] = $role;
 			}
 
-			$args = apply_filters( 'sul_user_query_args', array_merge( $args1, $args2 ) );
+			$args = apply_filters( 'sul_user_query_args', $args, $list_id );
 
 			$sul_users = new WP_User_Query( $args );
 
 			// The authors object.
 			$users = $sul_users->get_results();
 
-			do_action( 'simple_user_listing_before_loop' );
+			do_action( 'simple_user_listing_before_loop', $list_id );
 
 			if ( ! empty( $users ) )	 {
 				$i = 0;
@@ -153,7 +168,7 @@ if ( ! class_exists( 'Simple_User_Listing' ) ) {
 				sul_get_template_part( 'none', 'author' );
 			} //endif
 
-			do_action( 'simple_user_listing_after_loop' );
+			do_action( 'simple_user_listing_after_loop', $list_id );
 
 			// Output the content.
 			$output = ob_get_contents();
@@ -161,9 +176,9 @@ if ( ! class_exists( 'Simple_User_Listing' ) ) {
 
 			// Return only if we're inside a page. This won't list anything on a post or archive page.
 			if ( is_page() ) {
-				do_action( 'simple_user_listing_before_shortcode', $post );
+				do_action( 'simple_user_listing_before_shortcode', $post, $list_id );
 				echo $output;
-				do_action( 'simple_user_listing_after_shortcode', $post );
+				do_action( 'simple_user_listing_after_shortcode', $post, $list_id );
 			}
 		}
 
@@ -180,13 +195,122 @@ if ( ! class_exists( 'Simple_User_Listing' ) ) {
 		 * Add body class
 		 */
 		function body_class( $c ) {
-
 		    if( is_user_listing() ) {
 		        $c[] = 'userlist';
 
 		    }
-
 		    return $c;
+		}
+
+		/**
+		 * Register the search query var
+		 * @since 1.3
+		 */
+		function user_query_vars( $query_vars )	{
+			if( is_array( $this->allowed_search_vars() ) ) foreach( $this->allowed_search_vars() as $var ){
+				$query_vars[] = $var;
+			}
+			return $query_vars;
+		}
+
+		/**
+		 * Get Total Pages in User Query
+		 * @since 1.3
+		 */
+		public function get_total_user_pages(){
+
+			global $sul_users;
+
+			$total_pages = 1;
+
+			if( $sul_users && ! is_wp_error( $sul_users ) ){
+
+				// Get the total number of authors. Based on this, offset and number
+				// per page, we'll generate our pagination.
+				$total_authors = $sul_users->get_total();
+
+				// authors per page from query
+				$number = intval ( $sul_users->query_vars['number'] ) ? intval ( $sul_users->query_vars['number'] ) : 1;
+
+				// Calculate the total number of pages for the pagination (use ceil() to always round up)
+				$total_pages =  ceil( $total_authors / $number );
+
+			}
+
+			return $total_pages;
+
+		}
+
+		/**
+		 * Get Previous users
+		 * @since 1.3
+		 */
+		public function get_previous_users_url(){
+			global $sul_users;
+
+			// Get Query Var for pagination. This already exists in WordPress
+			$page = ( get_query_var( 'paged' ) ) ? get_query_var( 'paged' ) : 1;
+
+			// start with nothing
+			$previous_url = false;
+
+			// there is no previous link on page 1
+			if ( $page > 1 ) {
+
+				// add paging
+				$previous_url = add_query_arg( 'paged', $page - 1, get_permalink() );
+
+				// add search params
+				$previous_url = $this->add_search_args( $previous_url );
+
+			}
+
+			return $previous_url;
+
+		}
+
+		/**
+		 * Get Next users
+		 * @since 1.3
+		 */
+		public function get_next_users_url(){
+			global $sul_users;
+
+			// Get Query Var for pagination. This already exists in WordPress
+			$page = ( get_query_var( 'paged' ) ) ? get_query_var( 'paged' ) : 1;
+
+			// start with nothing
+			$next_url = false;
+
+			// there is no next link on last page
+			if ( $page < $this->get_total_user_pages() ) {
+
+				// add paging
+				$next_url = add_query_arg( 'paged', $page + 1, get_permalink() );
+
+				// add search params
+				$next_url = $this->add_search_args( $next_url );
+
+			}
+
+			return $next_url;
+		}
+
+
+		public function add_search_args( $url ){
+			global $sul_users;
+
+			// if this is a search query, preserve the query args
+			if ( ! empty( $_GET ) ) {
+
+				// get all the search query variables ( just the ones in the $_GET that we've whitelisted )
+				$search = array_intersect_key( $_GET, array_flip( $this->allowed_search_vars() ) );
+
+				if ( ! empty ( $search ) )
+					$url = add_query_arg( (array)$search, $url );
+
+			}
+			return $url;
 		}
 
 	}
@@ -210,13 +334,13 @@ function sul_get_template_part( $slug, $name = '' ) {
 
 	// Look in yourtheme/slug-name.php and yourtheme/simple-user-listing/slug-name.php
 	if ( $name )
-		$template = locate_template( array ( "{$slug}-{$name}.php", "{$simple_user_listing->template_url}{$slug}-{$name}.php" ) );
+		$template = locate_template( array ( "{$slug}-{$name}.php", "{$simple_user_listing->template_url()}{$slug}-{$name}.php" ) );
 	if ( !$template && $name && file_exists( $simple_user_listing->plugin_path() . "/templates/{$slug}-{$name}.php" ) )
 		$template = $simple_user_listing->plugin_path() . "/templates/{$slug}-{$name}.php";
 
 	// If template file doesn't exist, look in yourtheme/slug.php and yourtheme/simple_user_listing/slug.php
 	if ( !$template )
-		$template = locate_template( array ( "{$slug}.php", "{$simple_user_listing->template_url}{$slug}.php" ) );
+		$template = locate_template( array ( "{$slug}.php", "{$simple_user_listing->template_url()}{$slug}.php" ) );
 
 	if ( $template )
 		load_template( $template, false );
