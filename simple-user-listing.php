@@ -1,10 +1,10 @@
 <?php
 /*
 Plugin Name: Simple User Listing
-Plugin URI: http://wordpress.org/extend/plugins/simple-user-listing/
+Plugin URI: http://www.kathyisawesome.com/489/simple-user-listing/
 Description: Create a simple shortcode to list our WordPress users.
 Author: Kathy Darling
-Version: 1.5.3
+Version: 1.6.1
 Author URI: http://kathyisawesome.com
 License: GPL2
 
@@ -50,7 +50,7 @@ if ( ! class_exists( 'Simple_User_Listing' ) ) {
 
 		public function __construct() {
 
-			add_action('plugins_loaded', array( $this, 'load_text_domain' ) );
+			add_action( 'plugins_loaded', array( $this, 'load_text_domain' ) );
 			add_shortcode( 'userlist', array( $this, 'shortcode_callback' ) );
 			add_action( 'simple_user_listing_before_loop', array( $this, 'add_search' ) );
 			add_action( 'simple_user_listing_after_loop', array( $this, 'add_nav' ) );
@@ -204,14 +204,14 @@ if ( ! class_exists( 'Simple_User_Listing' ) ) {
 			// allow themes/plugins to filter the query args (probably redundant in light of pre_user_query filter, but still)
 			$args = apply_filters( 'sul_user_query_args', $args, $query_id );
 
-			// before the user listing loop
-			do_action( 'simple_user_listing_before_loop', $query_id );
-
 			// the query itself
 			$sul_users = new WP_User_Query( $args );
 
 			// The authors object.
 			$users = $sul_users->get_results();
+
+			// before the user listing loop
+			do_action( 'simple_user_listing_before_loop', $query_id );
 
 			// the user listing loop
 			if ( ! empty( $users ) )	 {
@@ -232,12 +232,10 @@ if ( ! class_exists( 'Simple_User_Listing' ) ) {
 			$output = ob_get_contents();
 			ob_end_clean();
 
-			// Return only if we're inside a page. This won't list anything on a post or archive page.
-			if ( is_page() ) {
-				do_action( 'simple_user_listing_before_shortcode', $post, $query_id );
-				return $output;
-				do_action( 'simple_user_listing_after_shortcode', $post, $query_id );
-			}
+			do_action( 'simple_user_listing_before_shortcode', $post, $query_id );
+			return $output;
+			do_action( 'simple_user_listing_after_shortcode', $post, $query_id );
+
 		}
 
 		/**
@@ -446,7 +444,8 @@ function sul_get_template_part( $slug, $name = '' ) {
 }
 
 /**
- * Is User listing?
+ * Is User listing post/page?
+ * Won't be true on archives
  *
  * @access public
  * @since 1.0
@@ -457,7 +456,7 @@ function is_user_listing(){
 
 	$listing = false;
 
-	if( is_page() && isset($post->post_content) && has_shortcode( $post->post_content, 'userlist' ) ) {
+	if( is_singular() && isset($post->post_content) && has_shortcode( $post->post_content, 'userlist' ) ) {
 		$listing = true;
 	}
 
